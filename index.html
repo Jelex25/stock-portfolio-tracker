@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Stock Portfolio</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for better aesthetics and responsiveness */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align to top */
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+            width: 100%;
+            max-width: 1400px; /* Increased max-width */
+            box-sizing: border-box;
+        }
+        table {
+            width: 100%;
+            border-collapse: separate; /* Allows border-radius on cells */
+            border-spacing: 0; /* Remove space between cells */
+        }
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb; /* Light gray border */
+        }
+        th {
+            background-color: #f9fafb; /* Slightly darker header background */
+            font-weight: 600;
+            color: #374151;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        tr:last-child td {
+            border-bottom: none; /* No border for the last row */
+        }
+        .gain {
+            color: #10b981; /* Green for gains */
+        }
+        .loss {
+            color: #ef4444; /* Red for losses */
+        }
+        .button-group button {
+            transition: all 0.2s ease-in-out;
+        }
+        .button-group button.active {
+            background-color: #4f46e5;
+            color: white;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: #4f46e5;
+        }
+        input:focus + .toggle-slider {
+            box-shadow: 0 0 1px #4f46e5;
+        }
+        input:checked + .toggle-slider:before {
+            -webkit-transform: translateX(26px);
+            -ms-transform: translateX(26px);
+            transform: translateX(26px);
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            border-radius: 12px;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #4f46e5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+            th, td {
+                padding: 8px 10px;
+                font-size: 0.85rem;
+            }
+            .button-group {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .button-group button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex justify-center items-start min-h-screen p-5">
+    <div class="container rounded-xl shadow-lg relative">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Stock Portfolio Automation</h1>
+
+        <div class="flex flex-wrap justify-center gap-4 mb-6 button-group">
+            <button id="auto1Btn" class="px-6 py-3 rounded-lg text-lg font-semibold bg-indigo-500 text-white shadow-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 active">
+                Auto (Simulated)
+            </button>
+            <button id="auto2Btn" class="px-6 py-3 rounded-lg text-lg font-semibold bg-gray-200 text-gray-700 shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50">
+                Auto 2 (Live Data)
+            </button>
+        </div>
+
+        <div id="auto2Options" class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6 p-4 bg-gray-50 rounded-lg shadow-inner hidden">
+            <span class="text-gray-700 font-medium">Using Live Market Data from Alpha Vantage.</span>
+            <!-- Pre/Post Market toggle is less relevant when using live market close data -->
+            <!-- <label class="toggle-switch">
+                <input type="checkbox" id="prePostMarketToggle">
+                <span class="toggle-slider"></span>
+            </label> -->
+        </div>
+
+        <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg">Symbol</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Last Price</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Price Chng %</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Price Chng $</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Market Value</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Daily P&L</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Cost/Share</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Cost Basis</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Unrealized P&L</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">% Gain</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">% of Acct</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">52 Wk High</th>
+                        <th class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">52 Wk Low</th>
+                    </tr>
+                </thead>
+                <tbody id="portfolioTableBody" class="bg-white divide-y divide-gray-200">
+                    <!-- Portfolio data will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="flex flex-wrap justify-between items-center mt-6 p-4 bg-blue-50 rounded-lg shadow-md">
+            <div class="text-lg font-semibold text-gray-800 mb-2 sm:mb-0">
+                Total Market Value: <span id="totalMarketValue" class="text-blue-700"></span>
+            </div>
+            <div class="text-lg font-semibold text-gray-800">
+                Total Unrealized P&L: <span id="totalUnrealizedPnL" class="text-blue-700"></span>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay hidden">
+            <div class="spinner"></div>
+            <p class="ml-4 text-gray-700 font-medium">Fetching live data...</p>
+        </div>
+    </div>
+
+    <script>
+        // Alpha Vantage API Key
+        const API_KEY = '2GYDOF40HWKFIK2L';
+        // Alpha Vantage GLOBAL_QUOTE endpoint for current stock data
+        const API_BASE_URL = 'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=';
+
+        // Initial portfolio data based on the provided image
+        // 'previousClose' is initialized to 'lastPrice' for the first calculation of daily change
+        const portfolioData = [
+            { symbol: 'ACHR', description: 'ARCHER AVIATION INC', qty: 800, lastPrice: 10.51, previousClose: 10.51, costShare: 19.01, '52WkHigh': 18.43, '52WkLow': 5.29 },
+            { symbol: 'AMZN', description: 'AMAZON.COM INC', qty: 100, lastPrice: 124.08, previousClose: 124.08, costShare: 190.01, '52WkHigh': 124.08, '52WkLow': 124.08 },
+            { symbol: 'COIN', description: 'COINBASE GLOBAL INC - CLASS A', qty: 100, lastPrice: 392.94, previousClose: 392.94, costShare: 241.48, '52WkHigh': 392.94, '52WkLow': 392.94 },
+            { symbol: 'CRCL', description: 'CIRCLE INTERNET GROUP INC', qty: 50, lastPrice: 188.07, previousClose: 188.07, costShare: 116.92, '52WkHigh': 188.07, '52WkLow': 188.07 },
+            { symbol: 'DITU', description: 'TRUMP MEDIA & TECHNO', qty: 300, lastPrice: 18.43, previousClose: 18.43, costShare: 44.81, '52WkHigh': 54.68, '52WkLow': 11.75 },
+            { symbol: 'ETHU', description: '2X ETHER ETF', qty: 45, lastPrice: 80.87, previousClose: 80.87, costShare: 232.34, '52WkHigh': 79.55, '52WkLow': 5.11 },
+            { symbol: 'IONQ', description: 'IONQ, INC', qty: 200, lastPrice: 42.57, previousClose: 42.57, costShare: 22.73, '52WkHigh': 54.74, '52WkLow': 6.22 },
+            { symbol: 'IOT', description: 'SAMSARA INC', qty: 300, lastPrice: 37.39, previousClose: 37.39, costShare: 47.86, '52WkHigh': 37.39, '52WkLow': 37.39 },
+            { symbol: 'ISRG', description: 'INTUITIVE SURGICAL INC', qty: 20, lastPrice: 508.85, previousClose: 508.85, costShare: 588.70, '52WkHigh': 616.00, '52WkLow': 413.82 },
+            { symbol: 'LZR', description: 'LUMINAR TECHNOLOGIES', qty: 300, lastPrice: 2.77, previousClose: 2.77, costShare: 6.93, '52WkHigh': 2.77, '52WkLow': 2.77 },
+            { symbol: 'MSTU', description: 'T-REX 2X LONG MSTR DT ETF', qty: 3000, lastPrice: 10.38, previousClose: 10.38, costShare: 9.64, '52WkHigh': 10.38, '52WkLow': 10.38 },
+            { symbol: 'MSTY', description: 'YIELDMAX MSTR OPTION IS ETF', qty: 600, lastPrice: 22.56, previousClose: 22.56, costShare: 23.68, '52WkHigh': 22.56, '52WkLow': 22.56 },
+            { symbol: 'NVDA', description: 'NVIDIA CORP', qty: 620, lastPrice: 164.92, previousClose: 164.92, costShare: 140.29, '52WkHigh': 17.50, '52WkLow': 86.62 },
+            { symbol: 'NVO', description: 'NOVO NORDISK', qty: 368, lastPrice: 88.93, previousClose: 88.93, costShare: 76.35, '52WkHigh': 88.93, '52WkLow': 88.93 },
+            { symbol: 'PLTR', description: 'PALANTIR TECHNOLOGIES INC-A', qty: 540, lastPrice: 142.1, previousClose: 142.1, costShare: 115.73, '52WkHigh': 22.80, '52WkLow': 115.73 },
+            { symbol: 'QBTS', description: 'D-WAVE QUANTUM INC', qty: 500, lastPrice: 15.19, previousClose: 15.19, costShare: 15.19, '52WkHigh': 15.19, '52WkLow': 15.19 },
+            { symbol: 'RKLB', description: 'ROCKET LAB CORP', qty: 200, lastPrice: 38.91, previousClose: 38.91, costShare: 29.70, '52WkHigh': 38.91, '52WkLow': 38.91 },
+            { symbol: 'SMCI', description: 'SUPER MICRO COMPUTER INC', qty: 700, lastPrice: 49.24, previousClose: 49.24, costShare: 43.97, '52WkHigh': 49.24, '52WkLow': 49.24 },
+            { symbol: 'SPY', description: 'SPDR S&P 500 ETF Trust', qty: 140, lastPrice: 622.04, previousClose: 622.04, costShare: 570.86, '52WkHigh': 622.04, '52WkLow': 622.04 },
+            { symbol: 'TSLA', description: 'TESLA INC', qty: 120, lastPrice: 313.51, previousClose: 313.51, costShare: 341.51, '52WkHigh': 313.51, '52WkLow': 313.51 },
+            { symbol: 'TSM', description: 'TAIWAN SEMICONDUCTOR-SP ADR', qty: 200, lastPrice: 23.06, previousClose: 23.06, costShare: 198.23, '52WkHigh': 23.06, '52WkLow': 23.06 },
+            { symbol: 'V', description: 'VISA INC CLASS A', qty: 20, lastPrice: 346.7, previousClose: 346.7, costShare: 317.25, '52WkHigh': 375.51, '52WkLow': 252.70 },
+            { symbol: 'WULF', description: 'TERAWULF INC', qty: 5340, lastPrice: 4.89, previousClose: 4.89, costShare: 3.00, '52WkHigh': 4.89, '52WkLow': 4.50 }
+        ];
+
+        let currentInterval; // To store the interval ID for clearing
+        let currentScenario = 'auto1'; // Default scenario
+        // let usePrePostMarket = false; // Flag for Auto 2 scenario pricing - removed as less relevant for live data
+
+        const portfolioTableBody = document.getElementById('portfolioTableBody');
+        const totalMarketValueSpan = document.getElementById('totalMarketValue');
+        const totalUnrealizedPnLSpan = document.getElementById('totalUnrealizedPnL');
+        const auto1Btn = document.getElementById('auto1Btn');
+        const auto2Btn = document.getElementById('auto2Btn');
+        const auto2OptionsDiv = document.getElementById('auto2Options');
+        // const prePostMarketToggle = document.getElementById('prePostMarketToggle'); // Removed
+
+        /**
+         * Formats a number to a currency string.
+         * @param {number} value - The number to format.
+         * @returns {string} - The formatted currency string.
+         */
+        function formatCurrency(value) {
+            return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+        }
+
+        /**
+         * Formats a number to a percentage string.
+         * @param {number} value - The number to format.
+         * @returns {string} - The formatted percentage string.
+         */
+        function formatPercentage(value) {
+            return value.toFixed(2) + '%';
+        }
+
+        /**
+         * Applies color class based on value (green for positive, red for negative).
+         * @param {number} value - The numeric value.
+         * @returns {string} - The CSS class string.
+         */
+        function getColorClass(value) {
+            return value > 0 ? 'gain' : (value < 0 ? 'loss' : '');
+        }
+
+        /**
+         * Fetches live stock data for a given symbol from Alpha Vantage.
+         * @param {string} symbol - The stock symbol to fetch.
+         * @returns {Promise<object|null>} - A promise that resolves with stock data or null on error.
+         */
+        async function fetchStockData(symbol) {
+            // Check if API_KEY is set
+            if (API_KEY === 'YOUR_API_KEY_HERE' || API_KEY === '') {
+                console.warn('API Key is not set. Using simulated data for now.');
+                return null; // Indicate failure to fetch live data
+            }
+
+            try {
+                // Construct Alpha Vantage GLOBAL_QUOTE URL
+                const url = `${API_BASE_URL}${symbol}&apikey=${API_KEY}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`Error fetching data for ${symbol} from Alpha Vantage: ${response.status} - ${errorText}`);
+                    return null;
+                }
+                const data = await response.json();
+
+                // Alpha Vantage GLOBAL_QUOTE response structure:
+                // { "Global Quote": { "01. symbol": "IBM", "02. open": "170.00", "03. high": "172.50", "04. low": "169.00", "05. price": "171.25", "06. volume": "123456", "07. latest trading day": "2023-07-15", "08. previous close": "169.50", "09. change": "1.75", "10. change percent": "1.0324%" } }
+
+                if (data['Global Quote']) {
+                    const quote = data['Global Quote'];
+                    return {
+                        currentPrice: parseFloat(quote['05. price']),
+                        previousClose: parseFloat(quote['08. previous close']),
+                        openPrice: parseFloat(quote['02. open']), // Using open as a proxy for pre-market if needed
+                        high: parseFloat(quote['03. high']), // Daily high
+                        low: parseFloat(quote['04. low'])    // Daily low
+                        // Note: Alpha Vantage free tier for GLOBAL_QUOTE does not typically provide 52-week high/low directly.
+                        // You might need a different function (e.g., TIME_SERIES_DAILY_ADJUSTED) and process historical data for that.
+                        // For simplicity, we'll use daily high/low for now, or keep initial 52Wk values if not updated.
+                    };
+                } else if (data['Error Message']) {
+                    console.error(`Alpha Vantage API Error for ${symbol}: ${data['Error Message']}`);
+                    return null;
+                } else {
+                    console.warn(`Unexpected Alpha Vantage response for ${symbol}:`, data);
+                    return null;
+                }
+
+            } catch (error) {
+                console.error(`Network or parsing error for ${symbol}:`, error);
+                return null;
+            }
+        }
+
+
+        /**
+         * Updates the portfolio data and refreshes the table.
+         */
+        async function updatePortfolio() {
+            loadingOverlay.classList.remove('hidden'); // Show loading overlay
+
+            let totalMarketValue = 0;
+            let totalUnrealizedPnL = 0;
+
+            const updatedPortfolioData = []; // Create a new array to store updated data
+
+            for (const stock of portfolioData) {
+                let currentLastPrice = stock.lastPrice; // Default to current stored price
+                let currentPreviousClose = stock.previousClose; // Default to current stored previous close
+                let current52WkHigh = stock['52WkHigh'];
+                let current52WkLow = stock['52WkLow'];
+
+                if (currentScenario === 'auto2') { // Live Data Scenario
+                    const liveData = await fetchStockData(stock.symbol);
+
+                    if (liveData && liveData.currentPrice !== undefined && liveData.currentPrice !== null) {
+                        currentLastPrice = liveData.currentPrice;
+                        // Use API's previous close if available, otherwise use our stored previousClose
+                        currentPreviousClose = liveData.previousClose !== undefined && liveData.previousClose !== null
+                                               ? liveData.previousClose
+                                               : stock.previousClose;
+
+                        // Alpha Vantage GLOBAL_QUOTE provides daily high/low, not 52-week.
+                        // We'll update 52WkHigh/Low if the daily high/low exceeds the stored 52Wk values.
+                        if (liveData.high !== undefined && liveData.high !== null) {
+                            current52WkHigh = Math.max(current52WkHigh, liveData.high);
+                        }
+                        if (liveData.low !== undefined && liveData.low !== null) {
+                            current52WkLow = Math.min(current52WkLow, liveData.low);
+                        }
+                    } else {
+                        // Fallback to simulation if live data fetch fails for Auto 2
+                        console.warn(`Falling back to simulated data for ${stock.symbol} in Auto 2.`);
+                        currentLastPrice *= (1 + (Math.random() - 0.5) * 0.015); // +/- 0.75% fluctuation
+                        current52WkHigh = Math.max(current52WkHigh, currentLastPrice * (1 + Math.random() * 0.005));
+                        current52WkLow = Math.min(current52WkLow, currentLastPrice * (1 - Math.random() * 0.005));
+                    }
+                } else { // Auto 1 (Simulated) Scenario
+                    currentLastPrice *= (1 + (Math.random() - 0.5) * 0.02); // +/- 1% fluctuation
+                    // 52WkHigh/Low remain static or update slightly in simulation if desired
+                }
+
+                // Ensure prices don't go below zero
+                currentLastPrice = Math.max(0, currentLastPrice);
+
+                // Update stock object with new values
+                stock.previousClose = stock.lastPrice; // Store old lastPrice for next daily change calculation if not from API
+                stock.lastPrice = currentLastPrice;
+                stock['52WkHigh'] = current52WkHigh;
+                stock['52WkLow'] = current52WkLow;
+
+
+                // Calculate derived columns using updated values
+                stock.priceChng$ = stock.lastPrice - currentPreviousClose;
+                stock.priceChngPct = (stock.priceChng$ / currentPreviousClose) * 100;
+                stock.marketValue = stock.qty * stock.lastPrice;
+                stock.dailyPnL = stock.qty * stock.priceChng$;
+                stock.costBasis = stock.qty * stock.costShare;
+                stock.unrealizedPnL = stock.marketValue - stock.costBasis;
+                stock.percentGain = (stock.unrealizedPnL / stock.costBasis) * 100;
+
+                totalMarketValue += stock.marketValue;
+                totalUnrealizedPnL += stock.unrealizedPnL;
+
+                updatedPortfolioData.push(stock); // Add the updated stock to the new array
+            }
+
+            // Calculate % of Acct after totalMarketValue is finalized
+            updatedPortfolioData.forEach(stock => {
+                stock.percentOfAcct = (stock.marketValue / totalMarketValue) * 100;
+            });
+
+            portfolioTableBody.innerHTML = ''; // Clear existing rows
+
+            // Render updated data to the table
+            updatedPortfolioData.forEach(stock => {
+                const row = portfolioTableBody.insertRow();
+                row.className = 'hover:bg-gray-50'; // Hover effect for rows
+
+                // Symbol
+                let cell = row.insertCell();
+                cell.textContent = stock.symbol;
+                cell.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900';
+
+                // Description
+                cell = row.insertCell();
+                cell.textContent = stock.description;
+                cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+
+                // Qty
+                cell = row.insertCell();
+                cell.textContent = stock.qty.toLocaleString();
+                cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+
+                // Last Price
+                cell = row.insertCell();
+                cell.textContent = formatCurrency(stock.lastPrice);
+                cell.className = `px-6 py-4 whitespace-nowrap text-sm ${getColorClass(stock.priceChng$)}`;
+
+                // Price Chng %
+                cell = row.insertCell();
+                cell.textContent = formatPercentage(stock.priceChngPct);
+                cell.className = `px-6 py-4 whitespace-nowrap text-sm ${getColorClass(stock.priceChngPct)}`;
+
+                // Price Chng $
+                cell = row.insertCell();
+                cell.textContent = formatCurrency(stock.priceChng$);
+                cell.className = `px-6 py-4 whitespace-nowrap text-sm ${getColorClass(stock.priceChng$)}`;
+
+                // Market Value
+                cell = row.insertCell();
+                cell.textContent = formatCurrency(stock.marketValue);
+                cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+
+                // Daily P&L
+                cell = row.insertCell();
+                cell.textContent = formatCurrency(stock.dailyPnL);
+                cell.className = `px-6 py-4 whitespace-nowrap text-sm ${getColorClass(stock.dailyPnL)}`;
+
+                // Cost/Share
+                cell = row.insertCell();
+                cell.textContent = formatCurrency(stock.costShare);
+                cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+
+                // Cost Basis
+                cell = row.insertCell();
+                cell.textContent = formatCurrency(stock.costBasis);
+                cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+
+                // Unrealized P&L
+                cell = row.insertCell();
+                cell.textContent = formatCurrency(stock.unrealizedPnL);
+                cell.className = `px-6 py-4 whitespace-nowrap text-sm ${getColorClass(stock.unrealizedPnL)}`;
+
+                // % Gain
+                cell = row.insertCell();
+                cell.textContent = formatPercentage(stock.percentGain);
+                cell.className = `px-6 py-4 whitespace-nowrap text-sm ${getColorClass(stock.percentGain)}`;
+
+                // % of Acct
+                cell = row.insertCell();
+                cell.textContent = formatPercentage(stock.percentOfAcct);
+                cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+
+                // 52 Wk High
+                cell = row.insertCell();
+                cell.textContent = stock['52WkHigh'] ? formatCurrency(stock['52WkHigh']) : 'N/A';
+                cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+
+                // 52 Wk Low
+                cell = row.insertCell();
+                cell.textContent = stock['52WkLow'] ? formatCurrency(stock['52WkLow']) : 'N/A';
+                cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+            });
+
+            // Update total values
+            totalMarketValueSpan.textContent = formatCurrency(totalMarketValue);
+            totalUnrealizedPnLSpan.textContent = formatCurrency(totalUnrealizedPnL);
+            totalUnrealizedPnLSpan.className = `${getColorClass(totalUnrealizedPnL)}`; // Apply color to total P&L
+
+            loadingOverlay.classList.add('hidden'); // Hide loading overlay
+        }
+
+        /**
+         * Starts the portfolio update interval for a given scenario.
+         * @param {string} scenario - The scenario to activate ('auto1' or 'auto2').
+         */
+        function startPortfolioUpdate(scenario) {
+            if (currentInterval) {
+                clearInterval(currentInterval); // Clear any existing interval
+            }
+            currentScenario = scenario;
+
+            // When switching to Auto 2 (Live Data), reset previousClose for fresh calculations
+            // When switching to Auto 1 (Simulated), also reset to avoid stale data from live fetch
+            portfolioData.forEach(stock => {
+                stock.previousClose = stock.lastPrice;
+            });
+
+            updatePortfolio(); // Initial update immediately
+            // Set update interval based on API rate limits.
+            // Alpha Vantage free tier is 5 calls per minute.
+            // With 20 stocks, 1 call per stock means 20 calls.
+            // To stay within 5 calls/minute, we need 20 calls / 5 calls/minute = 4 minutes per full update cycle.
+            // So, 4 minutes = 240 seconds = 240000 milliseconds.
+            currentInterval = setInterval(updatePortfolio, 240000); // Update every 4 minutes for Alpha Vantage free tier
+        }
+
+        // Event Listeners for scenario buttons
+        auto1Btn.addEventListener('click', () => {
+            startPortfolioUpdate('auto1');
+            auto1Btn.classList.add('active');
+            auto2Btn.classList.remove('active');
+            auto2OptionsDiv.classList.add('hidden'); // Hide Auto 2 options
+        });
+
+        auto2Btn.addEventListener('click', () => {
+            startPortfolioUpdate('auto2');
+            auto2Btn.classList.add('active');
+            auto1Btn.classList.remove('active');
+            auto2OptionsDiv.classList.remove('hidden'); // Show Auto 2 options
+        });
+
+        // Initialize the first scenario on page load
+        window.onload = function() {
+            startPortfolioUpdate('auto1');
+        };
+    </script>
+</body>
+</html>
